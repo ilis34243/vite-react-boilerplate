@@ -364,6 +364,7 @@ A simplified list can be found in the [Overview](#overview) section.
 | Встановлення залежностей | `pnpm install` | `node_modules` з `pnpm-lock.yaml` без змін |
 | Підготовка | `pnpm run setup` | `husky init`, `playwright install`, видалення `.husky/pre-commit` (`git init` на вже клонованому репозиторії нічого не псує) |
 | DEV-сервер | `pnpm run dev` | `VITE v8.0.16 ready in 1513 ms` → `http://localhost:5173/` |
+| DEV-сервер (команда з методички) | `npm run dev` | те саме: `VITE v8.0.16 ready in 1374 ms` → `http://localhost:5173/` |
 
 Скріншот стартової сторінки: `docs/screenshots/7-01-dev-server-start.png`.
 
@@ -533,6 +534,15 @@ export const Route = createRootRoute(); // без component → <Outlet/> по �
 `i18n.changeLanguage("en" ↔ "es")`. Уся візуалізація — tailwind-класи
 (`bg-blue-300 w-screen h-screen flex flex-col justify-center items-center text-6xl`), окремого CSS-файлу
 під компонент немає.
+
+Імпортів **інших компонентів у `Home.tsx` немає**: рядок `import { useTranslation } from "react-i18next"`
+і `import type { FunctionComponent } from "../common/types"` — єдині два. `FunctionComponent` тут — це
+не тип функції, а аліас `React.ReactElement | null` (див. `src/common/types.ts`), тож сигнатура
+`export const Home = (): FunctionComponent => …` означає «компонент повертає елемент або null». Уся
+конвенція проєкту побудована на цьому: кожен компонент і `App.tsx`, і devtools-обгортки мають однакову
+сигнатуру, тому легко замінюються та обертаються в `React.lazy`. Справжні «інші компоненти» живуть у
+`src/components/` (devtools, графіки Nivo, форми), але в `Home` не підключені — доки реальний застосунок
+не почне їх використовувати.
 
 `src/styles/tailwind.css` — один рядок `@import "tailwindcss";`. Це Tailwind **v4**: конфігурація живе в
 CSS (`@theme`), а плаґін `@tailwindcss/vite` збирає утиліти напряму. Файл `tailwind.config.js` із
