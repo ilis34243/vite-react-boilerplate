@@ -15,6 +15,9 @@ export const Home = (): FunctionComponent => {
 	return (
 		<div className="bg-blue-300 font-bold w-screen h-screen flex flex-col justify-center items-center">
 			<p className="text-white text-6xl">{t("home.greeting")}</p>
+			<p className="text-white text-2xl mt-4">
+				Лабораторна робота №7 — Vite + React + TypeScript
+			</p>
 			<button
 				className="hover:cursor-pointer"
 				type="submit"
