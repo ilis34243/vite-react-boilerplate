@@ -340,3 +340,311 @@ A simplified list can be found in the [Overview](#overview) section.
 - [ts-reset](https://github.com/total-typescript/ts-reset#readme)
 - [Faker](https://fakerjs.dev/)
 - [Dayjs](https://day.js.org/en/)
+
+---
+
+# Лабораторна робота №7 — Дослідження бойлерплейту фронтенд-додатку
+
+**Мета:** проаналізувати готовий template-проєкт (Vite + React + TypeScript), розібрати його
+конфігураційні файли та точку входу, навчитись швидко орієнтуватись у чужому фронтенд-проєкті та
+переконатися у роботі Hot Module Replacement (HMR).
+
+**Проєкт:** <https://github.com/RicardoValdovinos/vite-react-boilerplate> (клон у `F:\practis\kpz7`,
+коміт `e086793`).
+
+---
+
+## Етап 1. Запуск бойлерплейту
+
+Послідовність, виконана на Windows (Git Bash):
+
+| Крок | Команда | Результат |
+| --- | --- | --- |
+| Клонування | `git clone https://github.com/RicardoValdovinos/vite-react-boilerplate F:/practis/kpz7` | робоче дерево гілки `main` на коміті `e086793` |
+| Встановлення залежностей | `pnpm install` | `node_modules` з `pnpm-lock.yaml` без змін |
+| Підготовка | `pnpm run setup` | `husky init`, `playwright install`, видалення `.husky/pre-commit` (`git init` на вже клонованому репозиторії нічого не псує) |
+| DEV-сервер | `pnpm run dev` | `VITE v8.0.16 ready in 1513 ms` → `http://localhost:5173/` |
+
+Скріншот стартової сторінки: `docs/screenshots/7-01-dev-server-start.png`.
+
+> **Важливо.** Перший запуск дав помилки в консолі браузера та HTTP 500 на модулях
+> `/src/common/i18n.ts` і `/src/components/utils/development-tools/TanStackRouterDevelopmentTools.tsx`.
+> Методичка вимагає «стартову сторінку додатку без помилок у консолі», тому причину було знайдено і
+> усунено — див. розділ «Знайдена вада бойлерплейту».
+
+Після виправлення:
+
+- `npx tsc --noEmit` — вихід 0;
+- `pnpm lint` (`eslint --max-warnings 0`) — вихід 0;
+- консоль браузера — без помилок, залишились лише попередження (див. «Спостереження консолі»).
+
+---
+
+## Етап 2. Аналіз структури
+
+### 2.1. Ключові директорії
+
+```
+kpz7/
+├── index.html                  # HTML-шаблон: <div id="root"> + <script type="module" src="/src/main.tsx">
+├── vite.config.ts              # конфіг Vite: плаґіни, server, test
+├── tsconfig.json               # строга конфігурація TypeScript, "noEmit": true
+├── tsconfig.node.json          # типізація для самого vite.config.ts
+├── prettier.config.js          # табуляція, подвійні лапки, printWidth 80, endOfLine lf
+├── eslint.config.js            # flat config: JS/TS/React/a11y/unicorn + prettier
+├── commitlint.config.cjs       # conventional commits
+├── playwright.config.ts        # e2e-тести (webServer автозапускає dev-сервер)
+├── vitest.setup.ts             # розширення expect засобами @testing-library/jest-dom
+├── tailwind.config.js          # залишок від Tailwind v3, див. п. 2.6
+├── .env                        # VITE_APP_ENVIRONMENT="development"
+├── e2e/                        # Playwright-спеки
+├── public/                     # статика, яка копіюється в dist як є
+└── src/
+    ├── main.tsx                # точка входу
+    ├── App.tsx                 # провайдери (React Query, Router) + devtools
+    ├── routeTree.gen.ts        # АВТОГЕНЕРОВАНИЙ файл, не редагувати вручну
+    ├── routes/                 # file-based routing
+    ├── pages/                  # сторінки (Home)
+    ├── components/             # UI, форми, графіки, development-tools
+    ├── common/                 # i18n.ts, types.ts, utilities.ts
+    ├── assets/locales/         # {en,es}/translations.json
+    ├── styles/tailwind.css     # @import "tailwindcss";
+    └── store/ hooks/ features/ # порожні директорії-заготовки (лише README.md)
+```
+
+Шаблон орієнтований на feature-based архітектуру: `pages` — сторінки під маршрути, `components` —
+перевикористовуване UI, `features`/`hooks`/`store` — заготовки під бізнес-логіку, локальний і
+глобальний стан (Zustand).
+
+### 2.2. `package.json`
+
+`"type": "module"` — проєкт ESM, тому всі конфіги записані як `export default`.
+
+**dependencies** (19 пакетів — те, що потрапляє у браузер):
+
+| Група | Пакети |
+| --- | --- |
+| UI-ядро | `react@19.2.7`, `react-dom@19.2.7` |
+| Маршрутизація і дані | `@tanstack/react-router@1.170.16`, `@tanstack/react-query@5.101.0`, `@tanstack/react-table@8.21.3` |
+| Стан | `zustand@5.0.14` |
+| Форми і валідація | `react-hook-form@7.80.0`, `@hookform/resolvers@5.4.0`, `zod@4.4.3` |
+| Локалізація | `i18next@26.3.1`, `react-i18next@17.0.8`, `i18next-http-backend@4.0.0`, `i18next-browser-languagedetector@8.2.1` |
+| Графіки | `@nivo/core`, `@nivo/bar`, `@nivo/line`, `@nivo/pie` (0.99.0) |
+| Дати | `dayjs@1.11.21` |
+| Сторожовий випадок | `@storybook/addon-docs` лежить у **dependencies**, а не в devDependencies |
+
+**devDependencies** (45 пакетів) за групами:
+
+| Група | Пакети |
+| --- | --- |
+| Збірка і dev-сервер | `vite@8.0.16` (rolldown-збірка), `@vitejs/plugin-react-swc@4.3.1` |
+| Плаґіни для Vite | `@tailwindcss/vite`, `@tanstack/router-plugin`, `rollup-plugin-copy` |
+| TypeScript | `typescript@6.0.3`, `@types/node`, `@types/react`, `@types/react-dom`, `@total-typescript/ts-reset` |
+| Якість коду | `eslint@9.39.4` + 8 плагінів (`react`, `react-hooks`, `import`, `jsx-a11y`, `unicorn`, `react-refresh`, `storybook`, `eslint-config-prettier`), `typescript-eslint`/`@typescript-eslint/*`, `prettier@3.8.4`, `globals` |
+| Тестування | `vitest@4.1.9`, `@vitest/coverage-v8`, `@testing-library/{react,jest-dom,user-event}`, `jsdom`, `@playwright/test@1.61.0`, `@faker-js/faker` |
+| Допоміжники UI | `@headlessui/react`, `@heroicons/react`, `prop-types` |
+| Devtools | `@tanstack/{react-query-devtools,react-table-devtools,router-devtools}`, `@hookform/devtools` |
+| Storybook | `storybook@10.4.6`, `@storybook/react-vite`, `@storybook/addon-{links,themes}` |
+| Git-процес | `husky@9.1.7`, `commitizen`, `cz-conventional-changelog`, `@commitlint/{cli,config-conventional}` |
+| Утиліти скриптів | `shx` (кросплатформенний `rm` у скриптах), `tailwindcss@4.3.1`, `autoprefixer` |
+
+**scripts** — що фактично виконується:
+
+| Скрипт | Команда | Призначення |
+| --- | --- | --- |
+| `setup` | `git init && npx husky init && npx playwright install && shx rm .husky/pre-commit` | одноразова ініціалізація після клонування; `shx` замість `rm`, щоб команда працювала і на Windows |
+| `dev` | `vite` | dev-сервер з HMR на порті 5173 |
+| `build` | `tsc && vite build` | спершу перевірка типів, потім продакшн-збірка: помилка типів зупиняє білд |
+| `preview` | `vite preview` | локальний перегляд зібраного `dist/` |
+| `lint` / `lint:fix` | `eslint --max-warnings 0` | нульова толерантність до попереджень |
+| `format` | `prettier "src/**/*.{ts,tsx}" --write` | стилі коду |
+| `test` | `vitest run src/ && playwright test` | юніт + e2e разом |
+| `test:unit` / `test:unit:coverage` | `vitest src/` / `vitest --coverage src/` | лише юніт-тести |
+| `test:e2e` / `test:e2e:report` | `playwright test` / `playwright show-report` | лише e2e |
+| `storybook` / `storybook:build` | `storybook dev -p 6006` / `storybook build` | workshop для компонентів |
+| `prepare` | `husky` | установлює git-хуки, спрацьовує автоматично після `pnpm install` |
+| `commitlint` / `commitizen` | `commitlint --edit` / `git cz` | валідація та інтерактивний формат коміту |
+
+### 2.3. `vite.config.ts`
+
+Файл на 33 рядки, чотири плаґіни (порядок значущий):
+
+```ts
+plugins: [
+  react(),          // @vitejs/plugin-react-swc — транспіляція через SWC + Fast Refresh
+  tailwindcss(),    // @tailwindcss/vite — Tailwind v4 обробляється всередині Vite, без PostCSS
+  tanstackRouter(), // @tanstack/router-plugin — генерує src/routeTree.gen.ts за файлами з src/routes
+  copy({ targets: [{ src: "./src/assets/locales", dest: "./public" }] }), // rollup-plugin-copy
+]
+```
+
+- **Шляхи (аліаси).** У конфігу **немає** секції `resolve.alias`. Увесь проєкт імпортує відносними
+  шляхами (`./utilities`, `../../../common/utilities`). Модуль `node:path` використаний лише для
+  `path.resolve()` і `normalizePath()` у цілях плаґіна `copy`: `rollup-plugin-copy` не приймає
+  Windows-шляхи з зворотною похилкою, а `normalizePath` перетворює їх на `/`.
+- `server: { host: true, strictPort: true }` — сервер слухає усі мережеві інтерфейси (доступний з
+  локальної мережі чи мобільного пристрою) і **не** перемикається на інший порт: якщо 5173 зайнятий,
+ запуск упаде з помилкою замість тихо взяти 5174.
+- `test: { environment: "jsdom", setupFiles: ["./vitest.setup.ts"], css: true }` — конфіг Vitest живе
+  у тому ж файлі, саме тому `defineConfig` імпортується з `vitest/config`, а не з `vite`.
+- Плаґін `copy` — компроміс шаблону: i18next у продакшні завантажує переклади з
+  `locales/{{lng}}/translations.json`, тому під час збірки директорію `src/assets/locales` копіюють у
+  `public/`, з якої Vite забирає статичні файли в `dist/`.
+
+### 2.4. `src/main.tsx` — точка входу
+
+Ланцюжок: `index.html` → `/src/main.tsx` → `createRouter({ routeTree })` →
+`ReactDOM.createRoot(...).render(...)`.
+
+- `import "./styles/tailwind.css"` і `import "./common/i18n"` — побічні ефекти, які роблять стилі та
+  `t()` доступними в будь-якому компоненті без додаткових імпортів.
+- `routeTree` імпортується з **автогенерованого** `src/routeTree.gen.ts`.
+- `declare module "@tanstack/react-router" { interface Register { router: TanstackRouter } }` —
+  реєстрація типу маршрутизатора: саме це дає виведену типізацію `useNavigate()`, `<Link to="...">` і
+  параметрів маршрутів.
+- `ReactDOM.createRoot(document.querySelector("#root"))` обгорнуто в `if (!rootElement.innerHTML)` —
+  захист від повторного монтування.
+- Дерево рендеру: `React.StrictMode` → `React.Suspense fallback="loading"` → `<App router={router} />`;
+  `App.tsx` додає `QueryClientProvider`, `RouterProvider` і devtools (Router + React Query), які
+  зникають у продакшні завдяки `isProduction`-перевірці в `src/components/utils/development-tools/*`.
+
+### 2.5. `src/routes/` — file-based routing і зв'язок шляху з компонентом
+
+```ts
+// src/routes/index.ts
+export const Route = createFileRoute("/")({ component: Home });
+
+// src/routes/__root.ts
+export const Route = createRootRoute(); // без component → <Outlet/> по замовчуванню
+```
+
+- Шлях `/` прив'язаний до `Home` саме тут. Плаґін `tanstackRouter()` сканує `src/routes` і на кожен
+  файл створює запис у `src/routeTree.gen.ts` (у згенерованому коді видно ланцюжок
+  `createFileRoute("/")` → `rootRoute.addChildren([...])`).
+- Новий шлях = новий файл: `src/routes/about.ts` із `createFileRoute("/about")` дає `/about` без
+  ручного реєстрування. Тому `routeTree.gen.ts` не редагують — наступна генерація перезапише файл.
+- Одразу після генерації `routeTree.gen.ts` має форматування плагіна; `pnpm format` приводить його до
+  prettier-стилю проєкту (у нашій роботі саме тому файл опинився в дифі).
+
+### 2.6. `src/pages/Home.tsx` і стилі
+
+`Home` — демонстраційний компонент: `useTranslation()` дає `t("home.greeting")` («Hello, world!» із
+`src/assets/locales/en/translations.json`), кнопка `translate` перемикає мову
+`i18n.changeLanguage("en" ↔ "es")`. Уся візуалізація — tailwind-класи
+(`bg-blue-300 w-screen h-screen flex flex-col justify-center items-center text-6xl`), окремого CSS-файлу
+під компонент немає.
+
+`src/styles/tailwind.css` — один рядок `@import "tailwindcss";`. Це Tailwind **v4**: конфігурація живе в
+CSS (`@theme`), а плаґін `@tailwindcss/vite` збирає утиліти напряму. Файл `tailwind.config.js` із
+`content: [...]` — залишок від v3, який v4 не читає; `autoprefixer` у devDependencies теж уже не
+потрібен (Vite/esbuild додає префікси сам). Обидва — кандидат на видалення при реальному старті проєкту.
+
+---
+
+## Знайдена вада бойлерплейту (і чому консоль не була чистою)
+
+Симптом одразу після клонування — помилки Vite з HTTP 500:
+
+```
+11:46:56 [vite] (client) Pre-transform error: Failed to resolve import "./utils" from "src/common/i18n.ts". Does the file exist?
+```
+
+Причина — вада самого upstream, а не середовища розробки. Коміт `625c718 fix: satisfy lint errors - more
+descriptive file name required` перейменував `src/common/utils.ts` → `src/common/utilities.ts`
+(0 вставлень / 0 видалень, чисте перейменування), але не оновив чотири імпорти, які вказували на стару
+назву:
+
+| Файл | Було | Стало |
+| --- | --- | --- |
+| `src/common/i18n.ts` | `from "./utils"` | `from "./utilities"` |
+| `src/components/utils/development-tools/TanStackRouterDevelopmentTools.tsx` | `from "../../../common/utils"` | `from "../../../common/utilities"` |
+| `src/components/utils/development-tools/TanStackTableDevelopmentTools.tsx` | `from "../../../common/utils"` | `from "../../../common/utilities"` |
+| `src/components/utils/development-tools/ReactHookFormDevelopmentTools.tsx` | `from "../../../common/utils"` | `from "../../../common/utilities"` |
+
+Чому це «не помітно» у автора: помилку видно лише на тих модулях, які браузер реально запитує через
+dev-сервер; окрім того, у шаблоні перевірка типів «захована» в `build` (`tsc && vite build`), а не виноситься
+в окрему команду після клонування. У нашому випадку `npx tsc --noEmit` теж показував ці чотири помилки,
+тому виправлення підтверджено трьома незалежними перевірками: `tsc` (вихід 0), `pnpm lint` (вихід 0) і
+консоль браузера (без помилок).
+
+**Висновок для подальшої роботи:** жоден template не варта «він же клонується» — після клонування
+обов'язковий прогін `tsc --noEmit` → `lint` → `dev` → консоль браузера, перш ніж робити висновок про стан
+проєкту.
+
+---
+
+## Етап 3. Практична модифікація та доказ роботи HMR
+
+Зміна в `src/pages/Home.tsx` — під заголовком додано рядок:
+
+```tsx
+<p className="text-white text-2xl mt-4">
+  Лабораторна робота №7 — Vite + React + TypeScript
+</p>
+```
+
+Збереження файлу → текст з'явився на сторінці **миттєво, без перезавантаження**. Скріншот:
+`docs/screenshots/7-02-hmr-home-updated.png`.
+
+Доказ, що відпрацював саме HMR, а не повне перезавантаження сторінки (перевірено скриптом у консолі
+браузера):
+
+1. До редагування встановлено `window.__hmrMarker = "marker-…"`; після редагування мікер
+   **зберігся** — повний reload обнулив би `window`.
+2. `performance.now()` до зміни — 76 858 мс, після — 108 276 мс: безперервний аптайм тієї самої
+   сторінки.
+3. У консолі: `[vite] hot updated: /src/pages/Home.tsx` — Vite надіслав patch через WebSocket
+   (`/@vite/hmr`), і React Fast Refresh замінив лише компонент `Home`.
+4. `document.querySelectorAll("p")` після оновлення повертає
+   `["Hello, world!", "Лабораторна робота №7 — Vite + React + TypeScript"]`.
+
+Механізм: `@vitejs/plugin-react-swc` вставляє в модулі реєстрацію `import.meta.hot` і обгортку
+Fast Refresh; dev-сервер стежить за файлами, і на зміну публікує в веб-сокет `update`-сповіщення, а
+браузер підмінює модуль у графі ES-модулів без втрати стану React.
+
+---
+
+## Спостереження консолі та результати перевірок
+
+Попередження (не помилки), які залишились після виправлення імпортів:
+
+1. `i18next` через `LanguageDetector` визначає мову браузера (`ru`) і шукає
+   `src/assets/locales/ru/translations.json` → 404, далі спрацьовує `fallbackLng: "en"`. Локалі в
+   шаблоні є лише для `en` і `es` — поведінка очікувана, але показова: комбінація `LanguageDetector` +
+   `i18next-http-backend` дає мережевий 404 на кожен відкритий проєкт, якщо локаль користувача не підтримується.
+2. `[@tanstack/router-devtools] This package has moved to @tanstack/react-router-devtools` — шаблон
+   використовує застарілу назву пакета з devDependencies.
+3. `[vite:react-swc] We recommend switching to @vitejs/plugin-react for improved performance as no swc
+   plugins are used` — Vite 8 збіркається на rolldown, тому SWC-плагін тут додаткова, а не потрібна
+   ланка; це рекомендація, не помилка.
+
+Результати команд перевірки:
+
+| Команда | Вихід | Коментар |
+| --- | --- | --- |
+| `npx tsc --noEmit` | 0 | після виправлення чотирьох імпортів |
+| `pnpm lint` | 0 | `--max-warnings 0`, без попереджень |
+| `pnpm build` | 0 | 200 модулів, `dist/` за 1.25 s, головний чанк 360.20 kB (113.71 kB gzip) |
+| `pnpm test:unit` | 1 | «No test files found» — у шаблоні **немає** юніт-тестів у `src/`, є лише `e2e/example.spec.ts` |
+| `pnpm format` | 0 | нормалізував `routeTree.gen.ts` після генерації |
+
+Організаційна зміна: у `.gitignore` додано `/public/locales/`, бо цей каталог — артефакт плаґіна
+`rollup-plugin-copy`, який створює dev-сервер і збірка, а не вихідний код.
+
+---
+
+## Висновки
+
+1. Бойлерплейт — це не «порожня папка», а повноцінний інфраструктурний шар: 64 пакети, чотири
+   Vite-плаґіни, строга конфігурація TypeScript (вісім додаткових `no*`-правил поверх `strict: true`),
+   ESLint flat-config, git-хуки й три рівні тестування (unit / coverage / e2e).
+2. Маршрутизація у шаблоні файлоорієнтована: зв'язок `/ → Home` оголошений у `src/routes/index.ts`,
+   а `src/routeTree.gen.ts` — згенерований код, який не редагують вручну.
+3. У `vite.config.ts` немає аліасів, тож орієнтуватися в проєкті доводиться відносними імпортами — і
+   саме це стало причиною «тихої» поломки після перейменування `utils.ts`.
+4. Головна практична цінність дослідження: клонування + `pnpm install` **не гарантують** робочого
+   проєкту. Навіть актуальний `main` upstream містив зламаний імпорт, який виявляється лише під час
+   запуску dev-сервера.
+5. HMR працює на рівні окремого компонента (мікер у `window` і значення `performance.now()`
+   збереглися), тому ітерації по UI в цьому шаблоні — секунди, без перезавантаження сторінки та без
+   втрати стану React.
